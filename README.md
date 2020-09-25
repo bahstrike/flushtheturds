@@ -11,3 +11,5 @@ This process is known as "flushing the turds".
 The flushtheturds.exe utility can automate this process for you.
 To use, simply alt-tab out of the game and run flushtheturds.exe.
 A progress bar appears and counts down;  after ~12 seconds you can return to GTA to find you have been placed in a solo session.
+
+Any active resupply or sale mission you were hosting continues in your new session, allowing you to complete your goals in peace.

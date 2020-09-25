@@ -1,6 +1,4 @@
 # flushtheturds
-gtav solo session
-
 
 GTAV is full of griefers and script kiddies.
 

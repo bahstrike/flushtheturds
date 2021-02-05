@@ -4,7 +4,6 @@
 #include <GdiPlus.h>
 using namespace Gdiplus;
 
-
 void suspend(DWORD processId)
 {
     HANDLE hThreadSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
@@ -73,7 +72,30 @@ void EnableDebugPriv()
     CloseHandle(hToken); 
 }
 
-bool FindGTA(HANDLE& hProcess, DWORD& uFuckU)
+
+HWND ret_findprocwind;
+BOOL CALLBACK findprocwind(HWND hwnd, LPARAM lParam)
+{
+	DWORD lpdwProcessId;
+	GetWindowThreadProcessId(hwnd, &lpdwProcessId);
+	if (lpdwProcessId == lParam)
+	{
+		ret_findprocwind = hwnd;
+		return FALSE;
+	}
+	return TRUE;
+}
+
+HWND FindProcessWindow(DWORD dwProcessId)
+{
+	ret_findprocwind = NULL;
+
+	EnumWindows(findprocwind, dwProcessId);
+
+	return ret_findprocwind;
+}
+
+bool FindGTA(HANDLE& hProcess, DWORD& uFuckU, HWND& hWnd)
 {
 	hProcess = INVALID_HANDLE_VALUE;
 	uFuckU = 0;
@@ -94,6 +116,8 @@ bool FindGTA(HANDLE& hProcess, DWORD& uFuckU)
 
                 uFuckU = GetProcessId(hProcess);
 
+				hWnd = FindProcessWindow(uFuckU);
+
 				CloseHandle(snapshot);
 				return true;
             }
@@ -104,12 +128,13 @@ bool FindGTA(HANDLE& hProcess, DWORD& uFuckU)
 	return false;
 }
 
+HWND g_hwndGTA = NULL;
 HANDLE g_hGTA = INVALID_HANDLE_VALUE;
 DWORD g_uGTA = 0;
 
 const double g_dSuspendTotalTime = 12.0;
 double g_dSuspendTime = g_dSuspendTotalTime;
-#define INDICATORTICK 100  /* in milliseconds;  at least 50 */
+#define INDICATORTICK 0  /* in milliseconds;  at least 50 */
 
 bool Initialize(HINSTANCE hInstance);
 void Shutdown(HINSTANCE hInstance);
@@ -119,7 +144,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	EnableDebugPriv();
 
 
-	if(!FindGTA(g_hGTA, g_uGTA))
+	if(!FindGTA(g_hGTA, g_uGTA, g_hwndGTA))
 	{
 #ifndef _DEBUG
 		return 0;
@@ -142,6 +167,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 
 	resume(g_uGTA);
 
+	// reselect GTA window
+	SetForegroundWindow(g_hwndGTA);
+	SetFocus(g_hwndGTA);
+
 	return 0;
 }
 
@@ -150,7 +179,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 
 HWND g_hIndicatorWnd = 0;
 unsigned long g_uIndicatorLastHB = 0;
-int g_nIndicatorVal = -1;
+double g_dIndicatorVal = -1.0;
 
 
 
@@ -167,7 +196,7 @@ void AddRoundedRectangle(GraphicsPath& gp, const RectF& rc, REAL cr)
 
 void DrawIndicator(Graphics& gfx)
 {
-	if(g_nIndicatorVal == -1)
+	if(g_dIndicatorVal == -1.0)
 		return;
 
 	RECT screenRC;
@@ -188,36 +217,21 @@ void DrawIndicator(Graphics& gfx)
 	gfx.DrawPath(&ppen, &p2);
 
 
-	const int numBars = 60;
+	RectF progRC = rc;
+	REAL progWScale = 0.98;
+	REAL progHScale = 0.857;
+	progRC.Width = rc.Width * progWScale;
+	progRC.Height = rc.Height * progHScale;
+	progRC.X = (rc.X + rc.Width / (REAL)2) - progRC.Width / (REAL)2;
+	progRC.Y = (rc.Y + rc.Height / (REAL)2) - progRC.Height / (REAL)2;
 
-	double barWidth = (double)rc.Width / (double)(numBars*2+1);
-	for(int x=0; x<numBars; x++)
-	{
-		double cx = (double)(x*2+1) * barWidth + barWidth/2.0;
-		double cy = (double)(rc.X+rc.Height/2.0f);
 
-		Color clr;
+	SolidBrush progfill(Color(200, 0, 255, 0));
 
-		if( (x * 100 / numBars) < g_nIndicatorVal )
-			clr = Color(237, 0, 255, 0);
-		else
-			clr = Color(237, 0, 0, 0);
-
-		float rre = 4.0f * (float)screenHeight / 900.0f;
-
-		RectF rc2(0.0f, 0.0f, (float)barWidth*1.1f, (float)rc.Height*0.7f);
-
-		SolidBrush batbrush(clr);
-
-		RectF rc2a = rc2;
-		rc2a.Offset((float)cx-rc2.Width/2.0f, (float)cy-rc2.Height/2.0f);
-		GraphicsPath gp2a;
-		AddRoundedRectangle(gp2a, rc2a, rre);
-		gfx.FillPath(&batbrush, &gp2a);
-
-		Pen batpen(Color(100, 70, 70, 70), 2.0f);
-		gfx.DrawPath(&batpen, &gp2a);
-	}
+	// fill empty part (if exist)
+	RectF progFillRC = progRC;
+	progFillRC.Width = (REAL)g_dIndicatorVal * progRC.Width;
+	gfx.FillRectangle(&progfill, progFillRC);
 }
 
 void RedrawIndicator()
@@ -273,7 +287,7 @@ void ProcessIndicator()
 
 
 		// LOLL
-		g_nIndicatorVal = (int)(g_dSuspendTime / g_dSuspendTotalTime * 100.0);
+		g_dIndicatorVal = g_dSuspendTime / g_dSuspendTotalTime;
 
 
 		RedrawIndicator();
